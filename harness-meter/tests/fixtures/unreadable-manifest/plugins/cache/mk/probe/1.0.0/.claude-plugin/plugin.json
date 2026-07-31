@@ -1,0 +1,8 @@
+{
+  "name": "probe",
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "echo probe-hook" }] }
+    ]
+  }
+}

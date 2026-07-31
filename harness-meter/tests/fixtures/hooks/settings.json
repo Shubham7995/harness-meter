@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": { "inline@mk": true, "filebased@mk": true, "broken@mk": true },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "echo settings-hook" }] }
+    ]
+  }
+}

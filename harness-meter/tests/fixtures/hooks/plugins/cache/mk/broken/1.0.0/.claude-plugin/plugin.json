@@ -1,0 +1,5 @@
+{
+  "name": "broken",
+  "hooks": {
+    "PreToolUse": [
+      { "hooks": [{ "type": "command", "command": "echo unreachable" }] }

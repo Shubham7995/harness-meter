@@ -1,0 +1,12 @@
+{
+  "env": {
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "gho_FAKEFAKEFAKEFAKE",
+    "PATH": "/usr/bin"
+  },
+  "effortLevel": "high",
+  "enabledPlugins": {
+    "azure@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "serena@claude-plugins-official": false
+  }
+}

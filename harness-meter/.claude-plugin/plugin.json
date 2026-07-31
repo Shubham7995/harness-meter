@@ -1,0 +1,5 @@
+{
+  "name": "harness-meter",
+  "description": "Audits, prevents, and remediates token waste in a Claude Code installation.",
+  "version": "0.1.0"
+}

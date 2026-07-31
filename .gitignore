@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+
+# hm fix's undo envelope: a VERBATIM plaintext copy of the settings file as it
+# was before --apply, including any env block. Never commit it.
+.claude/.hm-undo.json
+.claude/settings.local.json

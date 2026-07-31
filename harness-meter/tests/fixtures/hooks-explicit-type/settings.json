@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [{ "type": "prompt", "command": "echo prompt-type" }] }
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "inline",
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node inline-hook.js" }] }
+    ]
+  }
+}

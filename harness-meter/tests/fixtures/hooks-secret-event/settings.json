@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "AuthRefresh": [
+      { "hooks": [{ "type": "command", "command": "echo refresh" }] }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "harness-meter",
+  "owner": {
+    "name": "Shubham Shinde"
+  },
+  "metadata": {
+    "description": "Tools for measuring and reducing the fixed token cost of a Claude Code installation.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "harness-meter",
+      "source": "./harness-meter",
+      "description": "Audits, prevents, and remediates token waste in a Claude Code installation. Measures the per-request plugin metadata prefix, proposes a project-scoped profile to cut it, and records tier-5 session metrics.",
+      "version": "0.1.0",
+      "category": "productivity",
+      "keywords": [
+        "tokens",
+        "cost",
+        "audit",
+        "metrics",
+        "plugins"
+      ]
+    }
+  ]
+}

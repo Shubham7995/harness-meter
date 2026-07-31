@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "Stop": [
+      { "hooks": [{ "command": "echo no-type" }] }
+    ]
+  }
+}
