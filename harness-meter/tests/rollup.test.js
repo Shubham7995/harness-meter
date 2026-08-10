@@ -117,6 +117,77 @@ describe('rollup', () => {
   })
 })
 
+describe('injected context', () => {
+  const v2 = o => row({ v: 2, hookInjectionChars: 0, hookInjections: 0, rosterChars: 0, ...o })
+
+  it('derives hook tokens per session from stored characters', () => {
+    const r = rollup([v2({ hookInjectionChars: 4000 }), v2({ hookInjectionChars: 8000 })])
+    assert.equal(r.injectedContext.hookTokensPerSession, 1500)
+  })
+
+  it('derives roster tokens per session', () => {
+    const r = rollup([v2({ rosterChars: 40000 })])
+    assert.equal(r.injectedContext.rosterTokensPerSession, 10000)
+  })
+
+  it('reports unavailable, NOT zero, for rows written before the counters existed', () => {
+    // The whole failure this project keeps re-encountering. A v1 row has no
+    // hookInjectionChars field at all; `sum` reads a missing key as 0, so an
+    // archive of old sessions would render as "this machine injects no context"
+    // — a confident measurement of something never measured. v1 rows must be
+    // excluded from the denominator, not averaged into it as zeroes.
+    const r = rollup([row({ outputTokens: 100 }), row({ outputTokens: 200 })])
+    assert.equal(r.injectedContext.sessionsMeasured, 0)
+    assert.equal(r.injectedContext.hookTokensPerSession, null)
+    assert.equal(r.injectedContext.rosterTokensPerSession, null)
+  })
+
+  it('averages over measured sessions only when the log mixes schema versions', () => {
+    // Two v1 rows and one v2 row carrying 4,000 chars. Averaging over all three
+    // gives 333 tokens/session; over the one that was actually measured, 1,000.
+    // The first number is an artifact of the upgrade, not a property of the
+    // machine.
+    const r = rollup([row(), row(), v2({ hookInjectionChars: 4000 })])
+    assert.equal(r.injectedContext.sessionsMeasured, 1)
+    assert.equal(r.injectedContext.hookTokensPerSession, 1000)
+  })
+
+  it('reports a measured zero when a v2 session genuinely injected nothing', () => {
+    // The other side of the rule: absent must read unavailable, but a real
+    // observation of zero must read zero. Without this the two are conflated
+    // and the null branch above could be implemented as "null whenever the
+    // chars are 0", which would be wrong.
+    const r = rollup([v2({ hookInjectionChars: 0 })])
+    assert.equal(r.injectedContext.sessionsMeasured, 1)
+    assert.equal(r.injectedContext.hookTokensPerSession, 0)
+  })
+
+  it('counts injections per session alongside their size', () => {
+    // Size alone cannot separate one 2,000-token SessionStart payload from
+    // forty 50-token per-turn ones, and they are different problems.
+    const r = rollup([v2({ hookInjections: 10, hookInjectionChars: 4000 })])
+    assert.equal(r.injectedContext.hookInjectionsPerSession, 10)
+  })
+})
+
+describe('injected context in the rendered report', () => {
+  const v2 = o => row({ v: 2, hookInjectionChars: 0, hookInjections: 0, rosterChars: 0, ...o })
+
+  it('renders the observed figures with the sessions they were measured over', () => {
+    const out = renderMetrics(rollup([v2({ hookInjectionChars: 5612, rosterChars: 77282 })]))
+    assert.match(out, /Injected context/)
+    assert.match(out, /1,403/) // 5612 chars / 4
+    assert.match(out, /19,321/) // 77282 chars / 4, rounded
+  })
+
+  it('says unavailable rather than 0 when no session carried the counters', () => {
+    const out = renderMetrics(rollup([row(), row()]))
+    assert.match(out, /Injected context/)
+    assert.equal(/\b0 tokens\b/.test(out), false, 'a pre-upgrade log must not render as a measured zero')
+    assert.match(out, /unavailable/)
+  })
+})
+
 describe('cost/success pairing rule', () => {
   it('never emits a cost figure without a task success rate', () => {
     // assistantTurns must be NON-ZERO, or ratio(output, 0) returns null via the

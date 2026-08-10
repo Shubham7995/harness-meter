@@ -2,6 +2,14 @@
 // change a definition and re-run, and the whole history re-derives.
 
 const CACHE_READ_TARGET = 0.90
+const CHARS_PER_TOKEN = 4
+
+// The schema version at which injected-context counters started being written.
+// A row below it has no such field, and `sum` reads a missing key as 0 — so
+// averaging over every row would render an archive of pre-upgrade sessions as
+// "this machine injects no context", a confident measurement of something never
+// measured. Older rows are excluded from the denominator instead.
+const INJECTION_SCHEMA = 2
 
 // Guards the ROW and the VALUE, not just null/undefined. `a + (r[k] ?? 0)`
 // concatenated on a string-typed counter (the same defect fixed in
@@ -90,7 +98,33 @@ export function rollup (rows, opts = {}) {
     // testable: a caller that genuinely has an outcome signal passes it and
     // gets a figure. Hard-coding null here would make the paired branch dead
     // code, and a rule enforced only by unreachable code is not enforced.
-    cost: costWithSuccess(output, rows.length, opts.taskSuccessRate ?? null)
+    cost: costWithSuccess(output, rows.length, opts.taskSuccessRate ?? null),
+
+    // What the fixed overhead actually cost, observed rather than estimated.
+    // `hm audit` reads skill and agent `description` frontmatter and reports a
+    // prefix figure; this reads what the model was actually handed. The two are
+    // different measurements of overlapping things and are deliberately not
+    // reconciled here — see README.
+    injectedContext: injectedContext(rows)
+  }
+}
+
+// `sessionsMeasured` is carried in the same object as the figures, for the
+// reason the cost pairing exists: a caller cannot read "0 tokens per session"
+// without also seeing how many sessions that average was taken over. Zero
+// measured sessions and zero injected tokens are different facts.
+function injectedContext (rows) {
+  const measured = rows.filter(r =>
+    r !== null && typeof r === 'object' && Number.isFinite(r.v) && r.v >= INJECTION_SCHEMA
+  )
+  const n = measured.length
+  const perSession = (k, scale) => (n === 0 ? null : sum(measured, k) / scale / n)
+
+  return {
+    sessionsMeasured: n,
+    hookTokensPerSession: perSession('hookInjectionChars', CHARS_PER_TOKEN),
+    rosterTokensPerSession: perSession('rosterChars', CHARS_PER_TOKEN),
+    hookInjectionsPerSession: perSession('hookInjections', 1)
   }
 }
 

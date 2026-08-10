@@ -1,6 +1,9 @@
 import { aggregate } from './transcript.js'
 
-export const SCHEMA_VERSION = 1
+// 2 added hookInjectionChars, hookInjections, and rosterChars. The bump is
+// load-bearing, not cosmetic: rollup uses it to tell a session that injected
+// nothing from a session recorded before injection was counted at all.
+export const SCHEMA_VERSION = 2
 
 // `readText` and `now` are injected so this is testable without a filesystem
 // or a clock. bin/hm-record.js supplies the real ones.

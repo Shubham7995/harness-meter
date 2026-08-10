@@ -98,6 +98,32 @@ describe('runAudit across both scanners', () => {
     const { json, markdown } = runAudit(HOOKS, AT)
     assert.equal(JSON.stringify({ json, markdown }).includes('npx tool'), false)
   })
+
+  it('reports the context-injecting hooks the fixture registers', () => {
+    // The fixture registers SessionStart in settings.json and UserPromptSubmit
+    // in the inline plugin's manifest. Both put text in the model's context
+    // that scanPrefix cannot see, because prefix cost is read from skill and
+    // agent frontmatter only.
+    const { findings } = runAudit(HOOKS, AT)
+    const injection = findings.filter(f => f.scanner === 'injection')
+    assert.deepEqual(injection.map(f => f.subject).sort(), ['plugin:inline', 'settings'])
+  })
+
+  it('excludes injected context from the measured total', () => {
+    // 68 is the prefix cost of the fixture's one described skill, and was the
+    // whole total before this scanner existed. An injection finding that
+    // guessed a size would land in totalTokens, which json.js sums across every
+    // finding without discrimination — an unknown laundered into a measurement.
+    const { json } = runAudit(HOOKS, AT)
+    assert.equal(json.byScanner.injection, 2, 'precondition: injection findings must be present to be excluded')
+    assert.equal(json.totalTokens, 68)
+  })
+
+  it('says in the report that the injected cost is real, unknown, and not in the total', () => {
+    const { markdown } = runAudit(HOOKS, AT)
+    assert.match(markdown, /Injected context/)
+    assert.match(markdown, /not included in the total/i)
+  })
 })
 
 describe('--cap', () => {

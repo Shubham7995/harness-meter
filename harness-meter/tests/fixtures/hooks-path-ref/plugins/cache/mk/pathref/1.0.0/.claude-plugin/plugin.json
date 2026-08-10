@@ -1,0 +1,4 @@
+{
+  "name": "pathref",
+  "hooks": "./hooks/claude-codex-hooks.json"
+}

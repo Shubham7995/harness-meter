@@ -20,6 +20,7 @@ import { inferCapabilities } from '../src/remediate/repo.js'
 import { proposeProfile } from '../src/remediate/profile.js'
 import { applyFix, commitFix, undoFix, planUndo } from '../src/remediate/apply.js'
 import { rollup } from '../src/metrics/rollup.js'
+import { scanTranscripts, listTranscripts } from '../src/metrics/scan.js'
 import { renderMetrics } from '../src/report/metrics.js'
 
 // homedir() default-root resolution: this is the project's one and only
@@ -32,9 +33,10 @@ function defaultRoot () {
 }
 
 function parseArgs (argv) {
-  const args = { command: argv[0] ?? 'help', json: false, root: null, cap: null, repo: null, apply: false, undo: false, includeFixtures: false }
+  const args = { command: argv[0] ?? 'help', json: false, root: null, cap: null, repo: null, apply: false, undo: false, includeFixtures: false, transcripts: false }
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--json') args.json = true
+    else if (argv[i] === '--transcripts') args.transcripts = true
     else if (argv[i] === '--apply') args.apply = true
     else if (argv[i] === '--undo') args.undo = true
     else if (argv[i] === '--include-fixtures') args.includeFixtures = true
@@ -115,8 +117,13 @@ function readSessionRows (logPath) {
 
 function runRollup (args) {
   const configRoot = args.root ?? defaultRoot()
-  const logPath = join(configRoot, 'harness-meter', 'sessions.jsonl')
-  const rows = readSessionRows(logPath)
+  // --transcripts reads the transcripts Claude Code has already written,
+  // instead of the log the SessionEnd hook appends to. Same counters, no setup
+  // and no waiting for new sessions — the difference between diagnosing a
+  // cache regression today and diagnosing it next week.
+  const rows = args.transcripts
+    ? scanTranscripts(listTranscripts(configRoot), p => readFileSync(p, 'utf8'))
+    : readSessionRows(join(configRoot, 'harness-meter', 'sessions.jsonl'))
 
   // Guide Load Efficiency needs the measured prefix size, which only
   // `hm audit` knows how to compute. Re-running the real scanners here (not
@@ -251,7 +258,7 @@ function runFix (args) {
 const ALLOWED = {
   audit: ['--json', '--root', '--cap'],
   fix: ['--repo', '--root', '--apply', '--undo', '--include-fixtures'],
-  rollup: ['--json', '--root']
+  rollup: ['--json', '--root', '--transcripts']
 }
 function assertFlagsAllowed (command, argv) {
   const allowed = ALLOWED[command]
@@ -284,7 +291,7 @@ function main () {
     return
   }
 
-  process.stdout.write('usage: hm audit [--json] [--root PATH] [--cap N]\n       hm fix [--repo PATH] [--root PATH] [--include-fixtures] [--apply] [--undo]\n       hm rollup [--json] [--root PATH]\n')
+  process.stdout.write('usage: hm audit [--json] [--root PATH] [--cap N]\n       hm fix [--repo PATH] [--root PATH] [--include-fixtures] [--apply] [--undo]\n       hm rollup [--json] [--root PATH] [--transcripts]\n')
   process.exit(args.command === 'help' ? 0 : 1)
 }
 

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { chmodSync, statSync } from 'node:fs'
+import { chmodSync, statSync, existsSync } from 'node:fs'
 import { listHookRegistrations } from '../src/adapter/hooks.js'
 import { loadSettings } from '../src/adapter/config.js'
 import { listInstalledPlugins } from '../src/adapter/plugins.js'
@@ -14,6 +14,8 @@ const OMITTED_TYPE = fileURLToPath(new URL('./fixtures/hooks-omitted-type/', imp
 const EXPLICIT_TYPE = fileURLToPath(new URL('./fixtures/hooks-explicit-type/', import.meta.url))
 const SECRET_EVENT = fileURLToPath(new URL('./fixtures/hooks-secret-event/', import.meta.url))
 const UNREADABLE_MANIFEST = fileURLToPath(new URL('./fixtures/unreadable-manifest/', import.meta.url))
+const PATH_REF = fileURLToPath(new URL('./fixtures/hooks-path-ref/', import.meta.url))
+const PATH_ESCAPE = fileURLToPath(new URL('./fixtures/hooks-path-escape/', import.meta.url))
 
 function regs (root) {
   const settings = loadSettings(root)
@@ -85,6 +87,42 @@ describe('listHookRegistrations', () => {
     const r = regs(EXPLICIT_TYPE)
     assert.equal(r.length, 1)
     assert.equal(r[0].type, 'prompt')
+  })
+
+  it('follows a plugin.json "hooks" declared as a PATH STRING to another file', () => {
+    // The manifest field is documented as either an inline block or a path
+    // relative to the plugin root. flatten() only ever handled the object form:
+    // a string fell through `typeof block !== 'object'` and the plugin's entire
+    // hook set vanished with no throw and no unmeasurable entry. Every hook
+    // ponytail ships is declared this way ("hooks": "./hooks/claude-codex-hooks.json"),
+    // and the file is NOT named hooks/hooks.json, so the file-based branch
+    // misses it too. Precondition: the fixture's only registration lives behind
+    // the path reference, so a regression empties the array rather than
+    // silently returning a hook found by some other branch.
+    const r = regs(PATH_REF)
+    assert.equal(r.length, 1)
+    assert.equal(r[0].source, 'plugin:pathref')
+    assert.equal(r[0].event, 'SessionStart')
+    assert.equal(r[0].command, 'node activate.js')
+    assert.equal(r[0].matcher, 'startup|resume|clear|compact')
+  })
+
+  it('refuses a "hooks" path that escapes the plugin directory', () => {
+    // A third-party manifest names the file this tool opens. Without a
+    // containment check the resolver would read a file outside the plugin.
+    //
+    // The escape target is deliberately the hooks-path-ref fixture's REAL hooks
+    // file: it exists, parses, and declares a SessionStart hook. An unguarded
+    // resolver therefore returns a registration and this test goes red. An
+    // earlier version pointed at a file with no `hooks` key, so it passed
+    // whether or not containment was implemented — an absence assertion over an
+    // input that never arrived, the shape README.md names.
+    assert.equal(
+      existsSync(join(PATH_ESCAPE, 'plugins/cache/mk/escaper/1.0.0/../../../../../../hooks-path-ref/plugins/cache/mk/pathref/1.0.0/hooks/claude-codex-hooks.json')),
+      true,
+      'precondition: the escape target must exist and carry hooks, or this test cannot fail'
+    )
+    assert.deepEqual(regs(PATH_ESCAPE), [])
   })
 
   it('keeps a hook registration intact when its EVENT NAME matches the secret-key pattern', () => {

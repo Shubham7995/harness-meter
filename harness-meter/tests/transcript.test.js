@@ -108,3 +108,97 @@ describe('aggregate', () => {
     assert.equal(JSON.stringify(r).includes(SECRET), false)
   })
 })
+
+describe('injected context', () => {
+  // Real shape, taken from a live transcript: hook output reaches the model as
+  // an `attachment` line, not as a message. `hook_additional_context.content` is
+  // a LIST of strings; `hook_success.content` is a string. Neither was ever
+  // counted, so every token a SessionStart hook injects was invisible here
+  // while `hm audit` printed a total that excluded it.
+  const attach = (a) => JSON.stringify({ type: 'attachment', attachment: a }) + '\n'
+
+  it('counts characters of hook_additional_context, whose content is a list', () => {
+    const r = aggregate(attach({
+      type: 'hook_additional_context',
+      hookEvent: 'SessionStart',
+      content: ['12345', '678']
+    }))
+    assert.equal(r.hookInjectionChars, 8)
+  })
+
+  it('counts characters of hook_success, whose content is a string', () => {
+    const r = aggregate(attach({
+      type: 'hook_success',
+      hookEvent: 'SessionStart',
+      content: '1234567890',
+      stdout: '1234567890',
+      exitCode: 0
+    }))
+    assert.equal(r.hookInjectionChars, 10)
+  })
+
+  it('does not count a no-op hook as an injection', () => {
+    // 280 of 303 hook attachments in a real session are PreToolUse/PostToolUse
+    // hooks that emit nothing. Counting those would report a tool-heavy session
+    // as context-heavy when not one character was added.
+    const r = aggregate(attach({
+      type: 'hook_success',
+      hookEvent: 'PostToolUse',
+      content: '',
+      stdout: '',
+      exitCode: 0
+    }))
+    assert.equal(r.hookInjectionChars, 0)
+    assert.equal(r.hookInjections, 0)
+  })
+
+  it('counts one injection per hook attachment that actually emitted something', () => {
+    const r = aggregate(
+      attach({ type: 'hook_success', hookEvent: 'PreToolUse', content: '', stdout: '' }) +
+      attach({ type: 'hook_success', hookEvent: 'SessionStart', content: 'abc', stdout: 'abc' }) +
+      attach({ type: 'hook_additional_context', hookEvent: 'UserPromptSubmit', content: ['de'] })
+    )
+    assert.equal(r.hookInjections, 2)
+    assert.equal(r.hookInjectionChars, 5)
+  })
+
+  it('books the roster listings separately from hook output', () => {
+    // skill_listing, agent_listing_delta, mcp_instructions_delta and
+    // deferred_tools_delta are injected too, and are the denominator that makes
+    // a hook figure readable: 1,400 tokens of hook output means one thing
+    // against a 2,000-token roster and another against a 19,000-token one.
+    const r = aggregate(
+      attach({ type: 'skill_listing', content: '1234567890', skillCount: 3, names: ['a'] }) +
+      attach({ type: 'mcp_instructions_delta', addedNames: ['x'], addedBlocks: ['12345'] })
+    )
+    assert.equal(r.hookInjectionChars, 0, 'roster must not be booked as hook output')
+    assert.ok(r.rosterChars >= 15, `expected the listing payloads counted, got ${r.rosterChars}`)
+  })
+
+  it('excludes the attachment discriminator from the roster size', () => {
+    // `type` is this tool's label for the block, not content the model was
+    // handed. Exact equality, not a lower bound: `>= 5` would pass whether or
+    // not the 13-character 'skill_listing' string was folded in, which is the
+    // whole behaviour under test.
+    const r = aggregate(attach({ type: 'skill_listing', content: '12345' }))
+    assert.equal(r.rosterChars, 5)
+  })
+
+  it('never returns the injected text itself, only its length', () => {
+    // Same rule as tool_result observations: this is arbitrary hook stdout and
+    // routinely carries project layout, branch names, and whatever else a hook
+    // chose to print.
+    const secret = 'BEGIN-PRIVATE-INJECTED-PAYLOAD'
+    const r = aggregate(attach({
+      type: 'hook_success', hookEvent: 'SessionStart', content: secret, stdout: secret
+    }))
+    assert.equal(r.hookInjectionChars, secret.length, 'precondition: the payload was seen')
+    assert.equal(JSON.stringify(r).includes('PRIVATE'), false)
+  })
+
+  it('ignores an attachment type it does not know rather than guessing', () => {
+    const r = aggregate(attach({ type: 'some_future_attachment', content: 'x'.repeat(50) }))
+    assert.equal(r.hookInjectionChars, 0)
+    assert.equal(r.rosterChars, 0)
+  })
+})

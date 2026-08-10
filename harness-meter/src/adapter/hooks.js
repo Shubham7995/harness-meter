@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { AdapterMismatch } from './errors.js'
 
 // A hooks block looks the same wherever it is declared:
@@ -40,6 +40,21 @@ function readJson (path) {
   }
 }
 
+// `hooks` in plugin.json is either an inline block or a path to a file holding
+// one. The path is the plugin's own text, so it is contained to the plugin
+// directory before being opened: a manifest must not be able to name an
+// arbitrary file for this tool to read.
+//
+// Containment is textual (resolve + prefix). A symlink planted INSIDE the
+// plugin directory could still point out of it — accepted, because anyone who
+// can write into the plugin cache already controls the hook scripts themselves.
+function resolveHooksRef (pluginDir, ref) {
+  const base = resolve(pluginDir)
+  const target = resolve(base, ref)
+  if (target !== base && !target.startsWith(base + sep)) return null
+  return readJson(target)
+}
+
 export function listHookRegistrations (root, settings, plugins) {
   const out = []
 
@@ -47,7 +62,14 @@ export function listHookRegistrations (root, settings, plugins) {
 
   for (const p of plugins) {
     const manifest = readJson(join(p.dir, '.claude-plugin', 'plugin.json'))
-    flatten(manifest?.hooks, `plugin:${p.name}`, out)
+    const declared = manifest?.hooks
+    flatten(
+      typeof declared === 'string'
+        ? resolveHooksRef(p.dir, declared)?.hooks
+        : declared,
+      `plugin:${p.name}`,
+      out
+    )
 
     const file = readJson(join(p.dir, 'hooks', 'hooks.json'))
     flatten(file?.hooks, `plugin:${p.name}`, out)

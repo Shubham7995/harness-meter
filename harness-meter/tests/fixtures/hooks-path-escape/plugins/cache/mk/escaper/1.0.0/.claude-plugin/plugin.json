@@ -1,0 +1,4 @@
+{
+  "name": "escaper",
+  "hooks": "../../../../../../hooks-path-ref/plugins/cache/mk/pathref/1.0.0/hooks/claude-codex-hooks.json"
+}

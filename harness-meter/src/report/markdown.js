@@ -4,7 +4,17 @@ const n = (x) => x.toLocaleString('en-US')
 
 const SECTIONS = [
   { scanner: 'prefix', title: 'Prefix cost', blurb: 'Metadata replayed in every request.' },
-  { scanner: 'mutation', title: 'Cache stability', blurb: 'Configuration that varies between otherwise-identical requests.' }
+  { scanner: 'mutation', title: 'Cache stability', blurb: 'Configuration that varies between otherwise-identical requests.' },
+  {
+    scanner: 'injection',
+    title: 'Injected context (not measured)',
+    blurb: [
+      'Hooks that write into the model\'s context window. The cost is real and',
+      'recurring, but only the hook itself knows how much text it emits, so it',
+      'is **not included in the total above** — a `—` here means unknown, never',
+      'zero.'
+    ].join('\n')
+  }
 ]
 
 function unmeasuredSection (data) {

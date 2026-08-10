@@ -13,7 +13,9 @@ describe('buildRow', () => {
     const row = buildRow(payload, () => '', '2026-07-27T00:00:00.000Z')
     assert.equal(row.session, 'abc-123')
     assert.equal(row.reason, 'clear')
-    assert.equal(row.v, 1)
+    // Hardcoded, not imported from SCHEMA_VERSION — asserting a constant
+    // against itself proves nothing, and rollup keys behaviour off this number.
+    assert.equal(row.v, 2)
     assert.equal(row.ts, '2026-07-27T00:00:00.000Z')
   })
 
@@ -38,9 +40,11 @@ describe('buildRow', () => {
       () => '', '2026-07-27T00:00:00.000Z'
     )
     assert.deepEqual(Object.keys(full).sort(), [
-      'assistantTurns', 'cacheCreationTokens', 'cacheReadTokens', 'inputTokens',
+      'assistantTurns', 'cacheCreationTokens', 'cacheReadTokens',
+      'hookInjectionChars', 'hookInjections', 'inputTokens',
       'observationChars', 'observationTokens', 'outputTokens', 'reason',
-      'session', 'skippedLines', 'toolCalls', 'toolErrors', 'toolResults', 'ts', 'v'
+      'rosterChars', 'session', 'skippedLines', 'toolCalls', 'toolErrors',
+      'toolResults', 'ts', 'v'
     ])
     const s = JSON.stringify(full)
     assert.equal(s.includes('/private/project'), false)

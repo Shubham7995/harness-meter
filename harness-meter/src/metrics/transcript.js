@@ -16,6 +16,34 @@ const CHARS_PER_TOKEN = 4 // same estimator the prefix scanner uses
 // "unavailable", so the corruption did not even surface as a failure.
 const num = v => (Number.isFinite(v) ? v : 0)
 
+// Hook output and the skill/agent/MCP rosters reach the model as `attachment`
+// lines rather than as messages, which is why neither has ever appeared in a
+// counter here. Two buckets, kept apart on purpose: hook output is a cost the
+// user chose by installing a plugin, the roster is the cost `hm audit`
+// already models statically. Booking them together would hide which is which.
+const HOOK_ATTACHMENTS = new Set(['hook_success', 'hook_additional_context'])
+const ROSTER_ATTACHMENTS = new Set([
+  'skill_listing',
+  'agent_listing_delta',
+  'mcp_instructions_delta',
+  'deferred_tools_delta'
+])
+
+// `content` is a string on hook_success and a LIST of strings on
+// hook_additional_context; the roster blocks carry their payload under several
+// differently-named keys. Measure length structurally rather than special-casing
+// each key, so a renamed field degrades to a smaller number instead of silently
+// reading as zero. The text itself is never retained — same rule as
+// tool_result observations.
+function contentLength (v) {
+  if (typeof v === 'string') return v.length
+  if (Array.isArray(v)) return v.reduce((n, x) => n + contentLength(x), 0)
+  if (v !== null && typeof v === 'object') {
+    return Object.values(v).reduce((n, x) => n + contentLength(x), 0)
+  }
+  return 0
+}
+
 export function aggregate (text) {
   const row = {
     inputTokens: 0,
@@ -27,6 +55,9 @@ export function aggregate (text) {
     toolErrors: 0,
     observationChars: 0,
     observationTokens: 0,
+    hookInjectionChars: 0,
+    hookInjections: 0,
+    rosterChars: 0,
     assistantTurns: 0,
     skippedLines: 0
   }
@@ -88,6 +119,27 @@ export function aggregate (text) {
         // routinely contains secrets.
         row.observationChars += JSON.stringify(c.content ?? '').length
       }
+    } else if (r?.type === 'attachment') {
+      const a = r?.attachment
+      const kind = a?.type
+      if (HOOK_ATTACHMENTS.has(kind)) {
+        // Length only, never the text. `content` is the field the model
+        // actually receives; `stdout` duplicates it on hook_success and is
+        // deliberately not added, or every such hook would count twice.
+        const chars = contentLength(a.content)
+        row.hookInjectionChars += chars
+        // A hook that emitted nothing did not inject. Most PreToolUse and
+        // PostToolUse hooks are silent, and counting them would make a
+        // tool-heavy session read as context-heavy.
+        if (chars > 0) row.hookInjections++
+      } else if (ROSTER_ATTACHMENTS.has(kind)) {
+        // Everything except the discriminator, which is this tool's own label
+        // for the block rather than anything the model was charged for.
+        for (const [k, v] of Object.entries(a)) {
+          if (k !== 'type') row.rosterChars += contentLength(v)
+        }
+      }
+      // An unrecognised attachment type is left alone rather than guessed at.
     }
   }
 
